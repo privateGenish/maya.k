@@ -1,11 +1,14 @@
-FROM public.ecr.aws/lambda/nodejs:18
+FROM public.ecr.aws/lambda/nodejs:20
+
+# Install build dependencies
+RUN dnf install -y cmake gcc-c++ make python3
 
 # Copy package.json first for better caching
 COPY package.json ${LAMBDA_TASK_ROOT}
 
 # Install dependencies
 WORKDIR ${LAMBDA_TASK_ROOT}
-RUN npm install
+RUN npm install --production
 
 # Set environment variables for n8n
 ENV N8N_USER_FOLDER=/tmp/.n8n

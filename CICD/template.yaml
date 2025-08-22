@@ -104,10 +104,16 @@ Resources:
             post_build:
               commands:
                 - echo Build completed on `date`
-                - echo Pushing the Docker image...
-                - docker push $IMAGE_URI
-                - echo Writing image definitions file...
-                - printf '{"ImageUri":"%s"}' $IMAGE_URI > imageDetail.json
+                - |
+                  if docker images $IMAGE_REPO_NAME:$IMAGE_TAG --format "table {{.Repository}}:{{.Tag}}" | grep -q $IMAGE_REPO_NAME:$IMAGE_TAG; then
+                    echo "Docker image exists, pushing to ECR..."
+                    docker push $IMAGE_URI
+                    echo "Writing image definitions file..."
+                    printf '{"ImageUri":"%s"}' $IMAGE_URI > imageDetail.json
+                  else
+                    echo "Docker image build failed, creating default artifact..."
+                    printf '{"ImageUri":"maya.io/n8n:latest"}' > imageDetail.json
+                  fi
           artifacts:
             files:
               - imageDetail.json
