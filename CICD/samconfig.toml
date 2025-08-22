@@ -1,0 +1,10 @@
+version = 0.1
+[default.deploy.parameters]
+stack_name = "mayaio-cicd"
+resolve_s3 = true
+s3_prefix = "mayaio-cicd"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "GitHubRepo=\"maya.k\" GitHubOwner=\"privateGenish\" GitHubBranch=\"source\" StackName=\"mayaio\""
+image_repositories = []

@@ -5,6 +5,12 @@ Description: >
 
   Sample SAM Template for maya.io
 
+Parameters:
+  ImageUri:
+    Type: String
+    Description: Docker image URI for N8N container
+    Default: maya.io/n8n:latest
+
 
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
@@ -143,6 +149,38 @@ Resources:
           Properties:
             Queue: !GetAtt MessageQueue.Arn
             BatchSize: 1
+
+  N8NContainer:
+    Type: AWS::Lambda::Function
+    Properties:
+      PackageType: Image
+      Code:
+        ImageUri: !Ref ImageUri
+      Role: !GetAtt N8NExecutionRole.Arn
+      Timeout: 30
+    
+  N8NExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: N8NExecutionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+      
 
 Outputs:
   HttpApiUrl:
