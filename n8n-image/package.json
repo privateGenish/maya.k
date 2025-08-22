@@ -1,0 +1,17 @@
+{
+  "name": "maya-n8n-lambda",
+  "version": "1.0.0",
+  "description": "n8n Lambda container with echo workflow",
+  "main": "handler.js",
+  "scripts": {
+    "build": "./build.sh",
+    "test-local": "docker run -p 9000:8080 maya-n8n-lambda:latest"
+  },
+  "dependencies": {
+    "n8n": "latest",
+    "@types/aws-lambda": "^8.10.119",
+    "aws-lambda-ric": "^3.0.0"
+  },
+  "author": "Maya Team",
+  "license": "MIT"
+}

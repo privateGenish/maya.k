@@ -1,0 +1,42 @@
+{
+  "name": "Echo Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    echoed_prompt: $input.first().json.prompt,\n    message: `You said: ${$input.first().json.prompt}`,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "echo-node",
+      "name": "Echo Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Echo Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "echo-workflow"
+}

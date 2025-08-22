@@ -1,0 +1,159 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  maya.io
+
+  Sample SAM Template for maya.io
+
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - "*"
+        AllowMethods:
+          - "*"
+
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: maya-notifications
+
+  MessageQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: messageQueue.fifo
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      MessageRetentionPeriod: 1209600  # 14 days
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+
+
+  WATokenSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: maya-wa-token
+      Description: WhatsApp Business API Token
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
+  WAWrapperLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: WAWrapper
+      Description: WhatsApp webhook message wrapper layer
+      ContentUri: functions/layers/WAWrapper/
+      CompatibleRuntimes:
+        - python3.13
+
+  WebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: webhook.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref WAWrapperLayer
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref NotificationTopic
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref WATokenSecret
+            - Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref NotificationTopic
+      Events:
+        WebhookPost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /webhook
+            Method: post
+        WebhookGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /webhook
+            Method: get
+
+  SnsHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/SNS/
+      Handler: handler.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref WAWrapperLayer
+      Environment:
+        Variables:
+          SQS_QUEUE_URL: !Ref MessageQueue
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt MessageQueue.Arn
+      Events:
+        SnsNotification:
+          Type: SNS
+          Properties:
+            Topic: !Ref NotificationTopic
+
+  ResponseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/response/
+      Handler: handler.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref WAWrapperLayer
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref WATokenSecret
+      Events:
+        SqsMessage:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt MessageQueue.Arn
+            BatchSize: 1
+
+Outputs:
+  HttpApiUrl:
+    Description: "HTTP API Gateway endpoint URL"
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
+  WebhookFunction:
+    Description: "Webhook Lambda Function ARN"
+    Value: !GetAtt WebhookFunction.Arn
+  NotificationTopicArn:
+    Description: "SNS Topic ARN for notifications"
+    Value: !Ref NotificationTopic
+  SnsHandlerFunction:
+    Description: "SNS Handler Lambda Function ARN"
+    Value: !GetAtt SnsHandlerFunction.Arn
