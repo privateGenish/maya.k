@@ -92,7 +92,7 @@ Resources:
               commands:
                 - echo Logging in to Amazon ECR...
                 - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
-                - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:8}
+                - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-8)
                 - IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
             build:
               commands:
@@ -359,7 +359,10 @@ Resources:
                 Action:
                   - codebuild:BatchGetBuilds
                   - codebuild:StartBuild
-                Resource: !GetAtt BuildProject.Arn
+                Resource: 
+                  - !GetAtt BuildProject.Arn
+                  - !GetAtt DockerBuildProject.Arn
+                  - !GetAtt ChangeDetectionProject.Arn
               - Effect: Allow
                 Action:
                   - cloudformation:CreateStack
