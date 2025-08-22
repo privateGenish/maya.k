@@ -9,8 +9,7 @@
   },
   "dependencies": {
     "n8n": "latest",
-    "@types/aws-lambda": "^8.10.119",
-    "aws-lambda-ric": "^3.0.0"
+    "@types/aws-lambda": "^8.10.119"
   },
   "author": "Maya Team",
   "license": "MIT"

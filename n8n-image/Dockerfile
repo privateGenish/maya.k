@@ -1,7 +1,6 @@
 FROM public.ecr.aws/lambda/nodejs:20
 
-# Install build dependencies
-RUN dnf install -y cmake gcc-c++ make python3
+# No build dependencies needed - Lambda containers don't need aws-lambda-ric
 
 # Copy package.json first for better caching
 COPY package.json ${LAMBDA_TASK_ROOT}
