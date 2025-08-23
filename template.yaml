@@ -41,6 +41,7 @@ Resources:
       FifoQueue: true
       ContentBasedDeduplication: true
       MessageRetentionPeriod: 1209600  # 14 days
+      VisibilityTimeout: 300
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
 
