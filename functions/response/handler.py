@@ -19,6 +19,36 @@ def get_wa_token():
         return None
 
 
+def invoke_n8n_lambda(prompt):
+    """Invoke N8N Lambda container to process message"""
+    try:
+        lambda_client = boto3.client('lambda')
+        
+        payload = {
+            'prompt': prompt
+        }
+        
+        response = lambda_client.invoke(
+            FunctionName='N8NContainer',
+            InvocationType='RequestResponse',
+            Payload=json.dumps(payload)
+        )
+        
+        response_payload = json.loads(response['Payload'].read())
+        
+        if response['StatusCode'] == 200 and response_payload.get('statusCode') == 200:
+            body = json.loads(response_payload.get('body', '{}'))
+            logger.info(f"N8N Lambda response: {body}")
+            return body
+        else:
+            logger.error(f"N8N Lambda error: {response_payload}")
+            return {'output': f"Processing error occurred"}
+            
+    except Exception as e:
+        logger.error(f"Failed to invoke N8N Lambda: {str(e)}")
+        return {'output': f"You said: {prompt}"}
+
+
 def lambda_handler(event, context):  # pylint: disable=unused-argument
     """Response Lambda function that processes messages from SQS queue
     
@@ -82,13 +112,14 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
                             text_body = message_content.get('body', '')
                             logger.info(f"Text message: {text_body}")
                             
-                            # Echo the text message back to sender
-                            echo_message = f"You said: {text_body}"
+                            # Invoke N8N Lambda container to process the message
+                            n8n_response = invoke_n8n_lambda(text_body)
+                            response_message = n8n_response.get('output', f"You said: {text_body}")
                             
                             if sender_phone:
                                 response_result = wa_response.send_reply_message(
                                     to_phone_number=sender_phone,
-                                    message_text=echo_message,
+                                    message_text=response_message,
                                     reply_to_message_id=original_message_id
                                 )
                                 

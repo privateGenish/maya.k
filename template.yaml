@@ -143,6 +143,10 @@ Resources:
               Action:
                 - secretsmanager:GetSecretValue
               Resource: !Ref WATokenSecret
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt N8NContainer.Arn
       Events:
         SqsMessage:
           Type: SQS
