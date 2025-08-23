@@ -96,21 +96,32 @@ Resources:
                 - IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
                 - echo "Checking for changes in n8n-image directory..."
                 - |
-                  # First try to unshallow if it's a shallow clone
-                  git fetch --unshallow 2>/dev/null || true
+                  # Hash-based change detection using artifacts
+                  echo "Calculating hash of n8n-image directory..."
+                  CURRENT_HASH=$(find n8n-image -type f -exec md5sum {} \; 2>/dev/null | sort -k 2 | md5sum | awk '{print $1}')
+                  echo "Current n8n-image hash: $CURRENT_HASH"
                   
-                  # Check if there are any files in n8n-image directory at all (fresh deployment)
-                  if [ ! -d "n8n-image" ]; then
-                    echo "n8n-image directory not found - skipping Docker build"
-                    export SHOULD_BUILD=false
-                  # Check for changes using multiple methods
-                  elif git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "n8n-image/" || \
-                       git diff --name-only $CODEBUILD_RESOLVED_SOURCE_VERSION~1 $CODEBUILD_RESOLVED_SOURCE_VERSION 2>/dev/null | grep -q "n8n-image/" || \
-                       git show --name-only --pretty=format: $CODEBUILD_RESOLVED_SOURCE_VERSION 2>/dev/null | grep -q "n8n-image/"; then
-                    echo "Changes detected in n8n-image directory - proceeding with Docker build"
+                  # Try to get previous hash from S3 artifacts
+                  BUCKET_NAME="${AWS_STACK_NAME:-maya.io}-pipeline-artifacts"
+                  echo "Checking for previous build hash in bucket: $BUCKET_NAME"
+                  if aws s3 cp s3://$BUCKET_NAME/n8n-image-hash.txt previous-hash.txt 2>/dev/null; then
+                    LAST_HASH=$(cat previous-hash.txt)
+                    echo "Previous n8n-image hash: $LAST_HASH"
+                  else
+                    LAST_HASH="none"
+                    echo "No previous build hash found - first build or new deployment"
+                  fi
+                  
+                  # Compare hashes and set SHOULD_BUILD
+                  if [ "$CURRENT_HASH" != "$LAST_HASH" ]; then
+                    if [ "$LAST_HASH" = "none" ]; then
+                      echo "No previous build found - build required"
+                    else
+                      echo "Hash changed - build required"
+                    fi
                     export SHOULD_BUILD=true
                   else
-                    echo "No changes in n8n-image directory - skipping Docker build"
+                    echo "Hash unchanged - skipping build"
                     export SHOULD_BUILD=false
                   fi
             build:
@@ -137,6 +148,9 @@ Resources:
                       docker push $IMAGE_URI
                       echo "Writing image definitions file..."
                       printf '{"ImageUri":"%s"}' $IMAGE_URI > imageDetail.json
+                      echo "Storing current hash for future builds..."
+                      echo $CURRENT_HASH > n8n-image-hash.txt
+                      aws s3 cp n8n-image-hash.txt s3://$BUCKET_NAME/n8n-image-hash.txt
                     else
                       echo "Docker image build failed, creating default artifact..."
                       printf '{"ImageUri":"maya.io/n8n:latest"}' > imageDetail.json

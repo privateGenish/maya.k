@@ -3,7 +3,7 @@ const util = require('util');
 const execPromise = util.promisify(exec);
 
 exports.lambdaHandler = async (event) => {
-    forceBuild = 0;
+    forceBuild =  1;
     try {
         const prompt = event.body ? JSON.parse(event.body).prompt : event.prompt || "Hello World";
         
