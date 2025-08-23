@@ -132,6 +132,7 @@ Resources:
       CodeUri: functions/response/
       Handler: handler.lambda_handler
       Runtime: python3.13
+      Timeout: 300
       Architectures:
         - x86_64
       Layers:

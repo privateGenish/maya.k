@@ -98,11 +98,11 @@ Resources:
                 - |
                   # Hash-based change detection using artifacts
                   echo "Calculating hash of n8n-image directory..."
-                  CURRENT_HASH=$(find n8n-image -type f -exec md5sum {} \; 2>/dev/null | sort -k 2 | md5sum | awk '{print $1}')
+                  export CURRENT_HASH=$(find n8n-image -type f -exec md5sum {} \; 2>/dev/null | sort -k 2 | md5sum | awk '{print $1}')
                   echo "Current n8n-image hash: $CURRENT_HASH"
                   
                   # Try to get previous hash from S3 artifacts
-                  BUCKET_NAME="${AWS_STACK_NAME:-maya.io}-pipeline-artifacts"
+                  export BUCKET_NAME="mayaio-cicd-pipeline-artifacts"
                   echo "Checking for previous build hash in bucket: $BUCKET_NAME"
                   if aws s3 cp s3://$BUCKET_NAME/n8n-image-hash.txt previous-hash.txt 2>/dev/null; then
                     LAST_HASH=$(cat previous-hash.txt)
@@ -141,6 +141,7 @@ Resources:
               commands:
                 - echo Build completed on `date`
                 - cd $CODEBUILD_SRC_DIR
+                - echo "Debug - SHOULD_BUILD=$SHOULD_BUILD, CURRENT_HASH=$CURRENT_HASH, BUCKET_NAME=$BUCKET_NAME"
                 - |
                   if [ "$SHOULD_BUILD" = "true" ]; then
                     if docker images $IMAGE_REPO_NAME:$IMAGE_TAG --format "table {{.Repository}}:{{.Tag}}" | grep -q $IMAGE_REPO_NAME:$IMAGE_TAG; then
