@@ -96,7 +96,17 @@ Resources:
                 - IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
                 - echo "Checking for changes in n8n-image directory..."
                 - |
-                  if git fetch --unshallow 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "n8n-image/"; then
+                  # First try to unshallow if it's a shallow clone
+                  git fetch --unshallow 2>/dev/null || true
+                  
+                  # Check if there are any files in n8n-image directory at all (fresh deployment)
+                  if [ ! -d "n8n-image" ]; then
+                    echo "n8n-image directory not found - skipping Docker build"
+                    export SHOULD_BUILD=false
+                  # Check for changes using multiple methods
+                  elif git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "n8n-image/" || \
+                       git diff --name-only $CODEBUILD_RESOLVED_SOURCE_VERSION~1 $CODEBUILD_RESOLVED_SOURCE_VERSION 2>/dev/null | grep -q "n8n-image/" || \
+                       git show --name-only --pretty=format: $CODEBUILD_RESOLVED_SOURCE_VERSION 2>/dev/null | grep -q "n8n-image/"; then
                     echo "Changes detected in n8n-image directory - proceeding with Docker build"
                     export SHOULD_BUILD=true
                   else
