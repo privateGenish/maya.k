@@ -8,8 +8,8 @@ exports.lambdaHandler = async (event) => {
         
         console.log('Received prompt:', prompt);
         
-        // Execute n8n workflow with the prompt
-        const command = `n8n execute --id echo-workflow --input '{"prompt": "${prompt}"}'`;
+        // Execute n8n workflow with the prompt using npm run
+        const command = `npm exec n8n execute --id echo-workflow --input '{"prompt": "${prompt}"}'`;
         
         const { stdout, stderr } = await execPromise(command, {
             env: {
