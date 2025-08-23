@@ -94,60 +94,61 @@ Resources:
                 - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
                 - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-8)
                 - IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
+                - echo "Checking for changes in n8n-image directory..."
+                - |
+                  if git fetch --unshallow 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "n8n-image/"; then
+                    echo "Changes detected in n8n-image directory - proceeding with Docker build"
+                    export SHOULD_BUILD=true
+                  else
+                    echo "No changes in n8n-image directory - skipping Docker build"
+                    export SHOULD_BUILD=false
+                  fi
             build:
               commands:
                 - echo Build started on `date`
-                - echo Building the Docker image...
-                - cd n8n-image
-                - docker build -t $IMAGE_REPO_NAME:$IMAGE_TAG .
-                - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $IMAGE_URI
+                - |
+                  if [ "$SHOULD_BUILD" = "true" ]; then
+                    echo "Building the Docker image..."
+                    cd n8n-image
+                    docker build -t $IMAGE_REPO_NAME:$IMAGE_TAG .
+                    docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $IMAGE_URI
+                    echo "Docker build completed"
+                  else
+                    echo "Skipping Docker build - no changes detected"
+                  fi
             post_build:
               commands:
                 - echo Build completed on `date`
+                - cd $CODEBUILD_SRC_DIR
                 - |
-                  if docker images $IMAGE_REPO_NAME:$IMAGE_TAG --format "table {{.Repository}}:{{.Tag}}" | grep -q $IMAGE_REPO_NAME:$IMAGE_TAG; then
-                    echo "Docker image exists, pushing to ECR..."
-                    docker push $IMAGE_URI
-                    echo "Writing image definitions file..."
-                    printf '{"ImageUri":"%s"}' $IMAGE_URI > imageDetail.json
+                  if [ "$SHOULD_BUILD" = "true" ]; then
+                    if docker images $IMAGE_REPO_NAME:$IMAGE_TAG --format "table {{.Repository}}:{{.Tag}}" | grep -q $IMAGE_REPO_NAME:$IMAGE_TAG; then
+                      echo "Docker image exists, pushing to ECR..."
+                      docker push $IMAGE_URI
+                      echo "Writing image definitions file..."
+                      printf '{"ImageUri":"%s"}' $IMAGE_URI > imageDetail.json
+                    else
+                      echo "Docker image build failed, creating default artifact..."
+                      printf '{"ImageUri":"maya.io/n8n:latest"}' > imageDetail.json
+                    fi
                   else
-                    echo "Docker image build failed, creating default artifact..."
-                    printf '{"ImageUri":"maya.io/n8n:latest"}' > imageDetail.json
+                    echo "No Docker build needed, getting latest image from ECR..."
+                    LATEST_TAG=$(aws ecr describe-images --repository-name $IMAGE_REPO_NAME --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' --output text 2>/dev/null || echo "latest")
+                    if [ "$LATEST_TAG" != "None" ] && [ "$LATEST_TAG" != "latest" ]; then
+                      LATEST_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$LATEST_TAG"
+                      echo "Using existing ECR image: $LATEST_URI"
+                    else
+                      echo "No images found in ECR, using current commit tag as fallback"
+                      LATEST_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG"
+                    fi
+                    printf '{"ImageUri":"%s"}' $LATEST_URI > imageDetail.json
                   fi
+                - echo "Artifact file contents:"
+                - cat imageDetail.json
+                - ls -la imageDetail.json
           artifacts:
             files:
               - imageDetail.json
-
-  # Change Detection Project
-  ChangeDetectionProject:
-    Type: AWS::CodeBuild::Project
-    Properties:
-      Name: !Sub "${AWS::StackName}-change-detection"
-      ServiceRole: !GetAtt CodeBuildRole.Arn
-      Artifacts:
-        Type: CODEPIPELINE
-      Environment:
-        Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/standard:7.0
-      Source:
-        Type: CODEPIPELINE
-        BuildSpec: |
-          version: 0.2
-          phases:
-            build:
-              commands:
-                - echo "Checking for changes in n8n-image directory"
-                - if git diff --name-only HEAD~1 HEAD | grep -q "n8n-image/"; then
-                    echo "Changes detected in n8n-image directory";
-                    echo '{"n8nChanged":"true"}' > changes.json;
-                  else
-                    echo "No changes in n8n-image directory";
-                    echo '{"n8nChanged":"false"}' > changes.json;
-                  fi
-          artifacts:
-            files:
-              - changes.json
 
   # CodeBuild Project
   BuildProject:
@@ -161,6 +162,13 @@ Resources:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_SMALL
         Image: aws/codebuild/standard:7.0
+        EnvironmentVariables:
+          - Name: ECR_REPOSITORY_URI
+            Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${N8NRepository}"
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref AWS::Region
+          - Name: ECR_REPO_NAME
+            Value: !Ref N8NRepository
       Source:
         Type: CODEPIPELINE
         BuildSpec: |
@@ -175,12 +183,53 @@ Resources:
             build:
               commands:
                 - sam build --use-container
+                - echo "Determining Docker image URI for SAM package..."
+                - |
+                  # First try to read from DockerBuild artifact
+                  if [ -f "../DockerOutput/imageDetail.json" ]; then
+                    echo "Found DockerBuild artifact, reading imageDetail.json..."
+                    DOCKER_IMAGE_URI=$(cat "../DockerOutput/imageDetail.json" | grep -o '"ImageUri":"[^"]*' | cut -d'"' -f4)
+                    if [ -n "$DOCKER_IMAGE_URI" ] && [ "$DOCKER_IMAGE_URI" != "maya.io/n8n:latest" ]; then
+                      echo "Using Docker image URI from DockerBuild: $DOCKER_IMAGE_URI"
+                      FULL_IMAGE_URI="$DOCKER_IMAGE_URI"
+                    else
+                      echo "DockerBuild used fallback, determining actual image..."
+                      FULL_IMAGE_URI=""
+                    fi
+                  else
+                    echo "No DockerBuild artifact found, determining image..."
+                    FULL_IMAGE_URI=""
+                  fi
+                  
+                  # Fallback logic if no valid URI from DockerBuild
+                  if [ -z "$FULL_IMAGE_URI" ]; then
+                    IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-8)
+                    FULL_IMAGE_URI="$ECR_REPOSITORY_URI:$IMAGE_TAG"
+                    
+                    # Check if this tag exists in ECR, if not get latest
+                    if ! aws ecr describe-images --repository-name $ECR_REPO_NAME --image-ids imageTag=$IMAGE_TAG >/dev/null 2>&1; then
+                      echo "Tag $IMAGE_TAG not found, getting latest image from ECR..."
+                      LATEST_TAG=$(aws ecr describe-images --repository-name $ECR_REPO_NAME --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' --output text)
+                      if [ "$LATEST_TAG" != "None" ] && [ -n "$LATEST_TAG" ]; then
+                        FULL_IMAGE_URI="$ECR_REPOSITORY_URI:$LATEST_TAG"
+                        echo "Using latest tag from ECR: $LATEST_TAG"
+                      else
+                        echo "No images found in ECR, using default"
+                        FULL_IMAGE_URI="$ECR_REPOSITORY_URI:latest"
+                      fi
+                    else
+                      echo "Using commit SHA tag: $IMAGE_TAG"
+                    fi
+                  fi
+                  
+                  echo "Final image URI for SAM package: $FULL_IMAGE_URI"
+                - sam package --resolve-s3 --image-repository $FULL_IMAGE_URI --output-template-file packaged-template.yaml
             post_build:
               commands:
                 - echo Build completed on `date`
           artifacts:
             files:
-              - '**/*'
+              - packaged-template.yaml
 
   # CodePipeline
   Pipeline:
@@ -210,18 +259,6 @@ Resources:
                 - Name: SourceOutput
         - Name: Build
           Actions:
-            - Name: CheckChanges
-              ActionTypeId:
-                Category: Build
-                Owner: AWS
-                Provider: CodeBuild
-                Version: '1'
-              Configuration:
-                ProjectName: !Ref ChangeDetectionProject
-              InputArtifacts:
-                - Name: SourceOutput
-              OutputArtifacts:
-                - Name: ChangeOutput
             - Name: DockerBuild
               ActionTypeId:
                 Category: Build
@@ -234,7 +271,6 @@ Resources:
                 - Name: SourceOutput
               OutputArtifacts:
                 - Name: DockerOutput
-              RunOrder: 2
             - Name: SAMBuild
               ActionTypeId:
                 Category: Build
@@ -243,11 +279,13 @@ Resources:
                 Version: '1'
               Configuration:
                 ProjectName: !Ref BuildProject
+                PrimarySource: SourceOutput
               InputArtifacts:
                 - Name: SourceOutput
+                - Name: DockerOutput
               OutputArtifacts:
                 - Name: BuildOutput
-              RunOrder: 3
+              RunOrder: 2
         - Name: Deploy
           Actions:
             - Name: Deploy
@@ -259,8 +297,8 @@ Resources:
               Configuration:
                 ActionMode: CREATE_UPDATE
                 StackName: !Ref StackName
-                TemplatePath: BuildOutput::template.yaml
-                Capabilities: CAPABILITY_IAM
+                TemplatePath: BuildOutput::packaged-template.yaml
+                Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
                 RoleArn: !GetAtt CloudFormationRole.Arn
                 ParameterOverrides: |
                   {
@@ -296,7 +334,38 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:PutObject
-                Resource: !Sub "${ArtifactsBucket.Arn}/*"
+                  - s3:CreateBucket
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource: 
+                  - !Sub "${ArtifactsBucket.Arn}/*"
+                  - !Sub "${ArtifactsBucket.Arn}"
+                  - "arn:aws:s3:::aws-sam-cli-managed-default-*"
+              - Effect: Allow
+                Action:
+                  - ecr:DescribeImages
+                  - ecr:GetAuthorizationToken
+                Resource: 
+                  - !GetAtt N8NRepository.Arn
+                  - "*"
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:GetTemplate
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DeleteStack
+                  - iam:CreateRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PassRole
+                Resource: "*"
 
   DockerBuildRole:
     Type: AWS::IAM::Role
@@ -334,6 +403,7 @@ Resources:
                   - ecr:InitiateLayerUpload
                   - ecr:UploadLayerPart
                   - ecr:CompleteLayerUpload
+                  - ecr:DescribeImages
                 Resource: 
                   - !GetAtt N8NRepository.Arn
                   - "*"
@@ -368,7 +438,6 @@ Resources:
                 Resource: 
                   - !GetAtt BuildProject.Arn
                   - !GetAtt DockerBuildProject.Arn
-                  - !GetAtt ChangeDetectionProject.Arn
               - Effect: Allow
                 Action:
                   - cloudformation:CreateStack
