@@ -136,6 +136,9 @@ Resources:
         - x86_64
       Layers:
         - !Ref WAWrapperLayer
+      Environment:
+        Variables:
+          N8N_FUNCTION_NAME: !Ref N8NContainer
       Policies:
         - Version: '2012-10-17'
           Statement:

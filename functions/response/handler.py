@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import boto3
 from wa_wrapper import WAWrapper
 from wa_response import WAResponse
@@ -29,7 +30,7 @@ def invoke_n8n_lambda(prompt):
         }
         
         response = lambda_client.invoke(
-            FunctionName='N8NContainer',
+            FunctionName=os.environ.get('N8N_FUNCTION_NAME', 'N8NContainer'),
             InvocationType='RequestResponse',
             Payload=json.dumps(payload)
         )
