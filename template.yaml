@@ -165,7 +165,7 @@ Resources:
       Code:
         ImageUri: !Ref ImageUri
       Role: !GetAtt N8NExecutionRole.Arn
-      Timeout: 30
+      Timeout: 300
     
   N8NExecutionRole:
     Type: AWS::IAM::Role

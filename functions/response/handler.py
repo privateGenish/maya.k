@@ -167,4 +167,11 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
         
     except Exception as e:
         logger.error(f"Error processing SQS messages: {str(e)}")
-        raise e
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': 'SQS messages processed with errors',
+                'error': str(e),
+                'processed_records': len(event.get('Records', []))
+            })
+        }
