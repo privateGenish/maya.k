@@ -15,13 +15,14 @@ ENV DB_SQLITE_POOL_SIZE=1
 ENV N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
 
 # Copy the workflow file and script
-COPY echo.json /tmp/echo.json
-COPY init.sh /tmp/init.sh
-RUN chmod +x /tmp/init.sh
+COPY echo.json /opt/echo.json
+COPY init.sh /opt/init.sh
+RUN chmod +x /opt/init.sh
 
 # Copy the handler file
 COPY lambda_handler.js /var/task/lambda_handler.js
 
+ENTRYPOINT [ "/tmp/init.sh" ]
 
 # Set the Lambda handler directly
-CMD ["/tmp/init.sh"]
+CMD ["lambda_handler.handler"]
