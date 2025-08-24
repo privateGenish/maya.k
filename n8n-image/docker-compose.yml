@@ -10,6 +10,11 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - NODE_ENV=production
+      - N8N_DISABLE_UI=true
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_API_KEY=maya.key
+      - N8N_APIS_ENABLE=true
+      - DB_SQLITE_POOL_SIZE=1
     volumes:
       - n8n_data:/home/node/.n8n
     restart: unless-stopped

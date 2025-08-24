@@ -2,30 +2,58 @@
   "name": "Echo Workflow",
   "nodes": [
     {
-      "parameters": {},
-      "id": "start-node",
-      "name": "Start",
-      "type": "n8n-nodes-base.start",
+      "parameters": {
+        "path": "/echo",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "authentication": "none"
+      },
+      "webhookId": "echo-webhook",
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [240, 300]
     },
     {
       "parameters": {
-        "jsCode": "return [{\n  json: {\n    echoed_prompt: $input.first().json.prompt,\n    message: `You said: ${$input.first().json.prompt}`,\n    timestamp: new Date().toISOString()\n  }\n}];"
+        "jsCode": "// Get the prompt from webhook body\nconst webhookData = $input.first().json;\nconst prompt = webhookData?.body?.prompt || 'No prompt provided';\n\nreturn [{\n  json: {\n    echoed_prompt: prompt,\n    message: `You said: ${prompt}`,\n    timestamp: new Date().toISOString()\n  }\n}];"
       },
       "id": "echo-node",
       "name": "Echo Code",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "response-node",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
     }
   ],
   "connections": {
-    "Start": {
+    "Webhook": {
       "main": [
         [
           {
             "node": "Echo Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Echo Code": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
             "type": "main",
             "index": 0
           }
