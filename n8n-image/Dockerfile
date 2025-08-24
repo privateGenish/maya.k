@@ -22,7 +22,7 @@ RUN chmod +x /opt/init.sh
 # Copy the handler file
 COPY lambda_handler.js /var/task/lambda_handler.js
 
-ENTRYPOINT [ "/tmp/init.sh" ]
+ENTRYPOINT [ "/opt/init.sh" ]
 
 # Set the Lambda handler directly
 CMD ["lambda_handler.handler"]
