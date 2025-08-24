@@ -5,47 +5,58 @@ const fs = require('fs');
 let n8nProcess = null;
 let serverReady = false;
 
-function waitForServer(maxAttempts = 60, interval = 1000) {
+function waitForServerByOutput() {
     return new Promise((resolve, reject) => {
-        let attempts = 0;
-        
-        const checkServer = () => {
-            attempts++;
-            console.log(`Checking if n8n server is ready... (${attempts}/${maxAttempts})`);
-            
-            // Check if n8n process is still alive
-            if (n8nProcess && !n8nProcess.killed) {
-                console.log('n8n process is still running (PID:', n8nProcess.pid, ')');
-            } else {
-                console.log('WARNING: n8n process appears to have died');
+        const timeout = setTimeout(() => {
+            reject(new Error('n8n startup timeout - server did not start within time limit'));
+        }, 120000); // 2 minutes timeout
+
+        const checkOutput = (data) => {
+            const output = data.toString();
+            if (output.includes('Server ready on') || 
+                output.includes('Webhook URL:') || 
+                output.includes('Editor is now accessible via') ||
+                output.includes('Started n8n') ||
+                output.includes('Server is ready')) {
+                console.log('n8n server startup detected in output:', output.trim());
+                clearTimeout(timeout);
+                
+                // Wait a moment then verify port is actually open
+                setTimeout(() => {
+                    const req = http.request({
+                        hostname: 'localhost',
+                        port: 5678,
+                        path: '/',
+                        method: 'GET',
+                        timeout: 5000
+                    }, (res) => {
+                        console.log('Port check confirmed - n8n is responding');
+                        serverReady = true;
+                        resolve(true);
+                    });
+                    
+                    req.on('error', (err) => {
+                        console.log('Port check failed, but startup was detected. Proceeding anyway.');
+                        serverReady = true;
+                        resolve(true);
+                    });
+                    
+                    req.end();
+                }, 2000);
             }
-            
-            const req = http.request({
-                hostname: 'localhost',
-                port: 5678,
-                path: '/',
-                method: 'GET',
-                timeout: 2000
-            }, (res) => {
-                console.log('n8n server is fully ready and responding!');
-                serverReady = true;
-                resolve(true);
-            });
-            
-            req.on('error', (err) => {
-                console.log(`Health check attempt ${attempts} failed:`, err.code);
-                if (attempts >= maxAttempts) {
-                    console.error('n8n server failed to start after maximum attempts');
-                    reject(new Error('Server startup timeout'));
-                } else {
-                    setTimeout(checkServer, interval);
-                }
-            });
-            
-            req.end();
         };
+
+        // Listen for startup indicators in stdout
+        n8nProcess.stdout.on('data', checkOutput);
+        n8nProcess.stderr.on('data', checkOutput);
         
-        checkServer();
+        // If process dies, reject
+        n8nProcess.on('exit', (code) => {
+            if (code !== 0) {
+                clearTimeout(timeout);
+                reject(new Error(`n8n process exited with code ${code}`));
+            }
+        });
     });
 }
 
@@ -299,7 +310,7 @@ exports.lambdaHandler = async (event) => {
             console.log('Waiting for server to be ready...');
             
             // Wait for server to be fully ready
-            await waitForServer();
+            await waitForServerByOutput();
             
             // Load and import workflow after server is ready
             const workflow = loadWorkflowFromFile();
@@ -354,7 +365,7 @@ exports.lambdaHandler = async (event) => {
             console.log('n8n restarted, waiting for server to be ready...');
             
             // Wait for server to be ready again
-            await waitForServer();
+            await waitForServerByOutput();
             
             console.log('n8n server restarted successfully, waiting for webhooks to register...');
             
