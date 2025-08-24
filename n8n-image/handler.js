@@ -13,6 +13,13 @@ function waitForServer(maxAttempts = 60, interval = 1000) {
             attempts++;
             console.log(`Checking if n8n server is ready... (${attempts}/${maxAttempts})`);
             
+            // Check if n8n process is still alive
+            if (n8nProcess && !n8nProcess.killed) {
+                console.log('n8n process is still running (PID:', n8nProcess.pid, ')');
+            } else {
+                console.log('WARNING: n8n process appears to have died');
+            }
+            
             const req = http.request({
                 hostname: 'localhost',
                 port: 5678,
@@ -26,6 +33,7 @@ function waitForServer(maxAttempts = 60, interval = 1000) {
             });
             
             req.on('error', (err) => {
+                console.log(`Health check attempt ${attempts} failed:`, err.code);
                 if (attempts >= maxAttempts) {
                     console.error('n8n server failed to start after maximum attempts');
                     reject(new Error('Server startup timeout'));
@@ -252,7 +260,10 @@ exports.lambdaHandler = async (event) => {
                     NODE_ENV: 'production',
                     N8N_DISABLE_UI: 'true',
                     DB_SQLITE_POOL_SIZE: '1',
-                    N8N_RUNNERS_ENABLED: 'true'
+                    N8N_RUNNERS_ENABLED: 'true',
+                    N8N_HOST: '0.0.0.0',
+                    N8N_PORT: '5678',
+                    N8N_PROTOCOL: 'http'
                 },
                 stdio: ['ignore', 'pipe', 'pipe']
             });
@@ -269,7 +280,21 @@ exports.lambdaHandler = async (event) => {
                 console.error('Failed to start n8n:', error);
             });
             
-            console.log('n8n process spawned');
+            n8nProcess.on('exit', (code, signal) => {
+                console.log(`n8n process exited with code ${code} and signal ${signal}`);
+            });
+            
+            console.log('n8n process spawned with PID:', n8nProcess.pid);
+            
+            // Check if npm and n8n are available first
+            try {
+                const npmVersion = execSync('npm --version', { encoding: 'utf8' });
+                console.log('npm version:', npmVersion.trim());
+                const n8nVersion = execSync('npm exec n8n -- --version', { encoding: 'utf8' });
+                console.log('n8n version:', n8nVersion.trim());
+            } catch (versionError) {
+                console.error('Error checking versions:', versionError.message);
+            }
             
             console.log('Waiting for server to be ready...');
             
