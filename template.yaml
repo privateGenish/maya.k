@@ -167,6 +167,9 @@ Resources:
         ImageUri: !Ref ImageUri
       Role: !GetAtt N8NExecutionRole.Arn
       Timeout: 300
+      MemorySize: 3008
+      EphemeralStorage:
+        Size: 2048
     
   N8NExecutionRole:
     Type: AWS::IAM::Role
