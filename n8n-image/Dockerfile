@@ -1,28 +1,28 @@
-FROM public.ecr.aws/lambda/nodejs:20
+FROM public.ecr.aws/lambda/nodejs:22
 
-# Copy package.json first for better caching
-COPY package.json ${LAMBDA_TASK_ROOT}
+# Install n8n globally
+RUN npm install -g n8n
 
-# Install dependencies and sqlite3
-WORKDIR ${LAMBDA_TASK_ROOT}
-RUN npm install --production && \
-    microdnf update -y && \
-    microdnf install -y sqlite && \
-    microdnf clean all
-
-# Set environment variables for n8n
-ENV N8N_USER_FOLDER=/tmp/.n8n
-ENV N8N_DISABLE_UI=false
-ENV NODE_ENV=production
-ENV DB_SQLITE_POOL_SIZE=1
-
-
-# Create directories
+# Create n8n data directory
 RUN mkdir -p /tmp/.n8n
 
-# Copy files
-COPY handler.js ${LAMBDA_TASK_ROOT}
-COPY echo-workflow.json ${LAMBDA_TASK_ROOT}
+# Set environment variables for Lambda
+ENV N8N_USER_FOLDER=/tmp/.n8n
+ENV N8N_DISABLE_UI=true
+ENV N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+ENV N8N_RUNNERS_ENABLED=true
+ENV DB_SQLITE_POOL_SIZE=1
+ENV N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
 
-# Set the CMD to the handler
-CMD [ "handler.lambdaHandler" ]
+# Copy the workflow file and script
+COPY echo.json /tmp/echo.json
+COPY init.sh /tmp/init.sh
+RUN chmod +x /tmp/init.sh
+
+# Copy the handler file
+COPY lambda_handler.js /var/task/lambda_handler.js
+
+ENTRYPOINT ["/tmp/init.sh"]
+
+# Set the Lambda handler directly
+CMD ["lambda_handler.handler"]
