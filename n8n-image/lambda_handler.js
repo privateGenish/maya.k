@@ -5,7 +5,7 @@ async function waitForN8n() {
     const maxWaitTime = 180000; // 3 minutes (180 seconds)
     const interval = 1000; // 1 second
     const startTime = Date.now();
-    const healthUrl = 'http://0.0.0.0:5678/webhook/status';
+    const healthUrl = 'http://127.0.0.1:5678/webhook/status';
     let attemptCount = 0;
     
     console.log(`Starting n8n health check. Will check ${healthUrl} for up to 3 minutes...`);
@@ -19,7 +19,7 @@ async function waitForN8n() {
             
             const response = await new Promise((resolve, reject) => {
                 const req = http.request({
-                    hostname: '0.0.0.0',
+                    hostname: '127.0.0.1',
                     port: 5678,
                     path: '/webhook/status',
                     method: 'GET',
@@ -90,7 +90,7 @@ exports.handler = async (event) => {
 
         const postData = JSON.stringify(event);
         const options = {
-            hostname: '0.0.0.0',
+            hostname: '127.0.0.1',
             port: 5678,
             path: '/webhook/echo', 
             method: 'POST',
