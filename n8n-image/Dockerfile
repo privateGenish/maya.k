@@ -17,7 +17,7 @@ ENV N8N_PORT=5678
 ENV N8N_PROTOCOL=http
 ENV N8N_LOG_LEVEL=debug
 ENV NODE_ENV=production
-ENV NODE_OPTIONS="--dns-result-order=ipv4first"
+ENV N8N_LISTEN_ADDRESS=0.0.0.0
 
 # Copy the workflow files and script
 COPY echo.json /opt/echo.json
