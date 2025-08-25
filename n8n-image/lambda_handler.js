@@ -1,4 +1,5 @@
 const http = require('http');
+const fs = require('fs');
 
 async function waitForN8n() {
     const maxWaitTime = 180000; // 3 minutes (180 seconds)
@@ -57,7 +58,27 @@ async function waitForN8n() {
     }
     
     const totalElapsed = Math.round((Date.now() - startTime) / 1000);
-    throw new Error(`n8n failed to start within 3 minutes. Total attempts: ${attemptCount}, total time: ${totalElapsed}s`);
+    
+    // Read and print n8n logs for debugging
+    let logContent = '';
+    try {
+        if (fs.existsSync('/tmp/n8n.log')) {
+            logContent = fs.readFileSync('/tmp/n8n.log', 'utf8');
+            console.log('=== N8N STARTUP LOGS ===');
+            logContent.split('\n').forEach((line, index) => {
+                if (line.trim()) {
+                    console.log(`n8n[${index + 1}]: ${line}`);
+                }
+            });
+            console.log('=== END N8N LOGS ===');
+        } else {
+            console.log('No n8n log file found at /tmp/n8n.log');
+        }
+    } catch (logError) {
+        console.log(`Error reading n8n logs: ${logError.message}`);
+    }
+    
+    throw new Error(`n8n failed to start within 3 minutes. Total attempts: ${attemptCount}, total time: ${totalElapsed}s. Check logs above for details.`);
 }
 
 exports.handler = async (event) => {
