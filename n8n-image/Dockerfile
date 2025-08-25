@@ -18,8 +18,9 @@ ENV N8N_PROTOCOL=http
 ENV N8N_LOG_LEVEL=debug
 ENV NODE_ENV=production
 
-# Copy the workflow file and script
+# Copy the workflow files and script
 COPY echo.json /opt/echo.json
+COPY health.json /opt/health.json
 COPY init.sh /opt/init.sh
 RUN chmod +x /opt/init.sh
 

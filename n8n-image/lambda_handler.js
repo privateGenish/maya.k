@@ -4,14 +4,23 @@ async function waitForN8n() {
     const maxWaitTime = 180000; // 3 minutes (180 seconds)
     const interval = 1000; // 1 second
     const startTime = Date.now();
+    const healthUrl = 'http://localhost:5678/webhook/status';
+    let attemptCount = 0;
+    
+    console.log(`Starting n8n health check. Will check ${healthUrl} for up to 3 minutes...`);
     
     while (Date.now() - startTime < maxWaitTime) {
+        attemptCount++;
+        const elapsed = Math.round((Date.now() - startTime) / 1000);
+        
         try {
+            console.log(`Health check attempt ${attemptCount} (${elapsed}s elapsed) - checking ${healthUrl}`);
+            
             const response = await new Promise((resolve, reject) => {
                 const req = http.request({
                     hostname: 'localhost',
                     port: 5678,
-                    path: '/healthz',
+                    path: '/webhook/status',
                     method: 'GET',
                     timeout: 2000
                 }, (res) => {
@@ -25,18 +34,30 @@ async function waitForN8n() {
                 req.end();
             });
             
+            console.log(`Health check response: status=${response.statusCode}, body="${response.data}"`);
+            
             if (response.statusCode === 200) {
-                console.log('n8n is ready!');
-                return true;
+                try {
+                    const parsedResponse = JSON.parse(response.data);
+                    if (parsedResponse.status === 'ready') {
+                        console.log(`n8n is ready! Health check succeeded after ${elapsed}s and ${attemptCount} attempts`);
+                        return true;
+                    } else {
+                        console.log(`Health endpoint responded but status not ready: ${JSON.stringify(parsedResponse)}`);
+                    }
+                } catch (parseError) {
+                    console.log(`Health endpoint responded with non-JSON: ${response.data}`);
+                }
             }
         } catch (error) {
-            // n8n not ready yet, continue waiting
+            console.log(`Health check attempt ${attemptCount} failed: ${error.message}`);
         }
         
         await new Promise(resolve => setTimeout(resolve, interval));
     }
     
-    throw new Error('n8n failed to start within 3 minutes');
+    const totalElapsed = Math.round((Date.now() - startTime) / 1000);
+    throw new Error(`n8n failed to start within 3 minutes. Total attempts: ${attemptCount}, total time: ${totalElapsed}s`);
 }
 
 exports.handler = async (event) => {

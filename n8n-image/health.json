@@ -1,0 +1,69 @@
+{
+  "name": "Health Check Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "status",
+        "httpMethod": "GET",
+        "responseMode": "responseNode"
+      },
+      "id": "health-webhook-node",
+      "name": "Health Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "health-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Simple health check response\nreturn [{\n  json: {\n    status: 'ready',\n    timestamp: new Date().toISOString(),\n    service: 'n8n'\n  }\n}];"
+      },
+      "id": "health-code-node",
+      "name": "Health Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "health-response-node",
+      "name": "Respond to Health Check",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Health Webhook": {
+      "main": [
+        [
+          {
+            "node": "Health Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Health Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "health"
+}
