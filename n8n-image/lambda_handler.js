@@ -86,7 +86,9 @@ exports.handler = async (event) => {
         console.log('Received event:', JSON.stringify(event, null, 2));
         
         // Wait for n8n to be ready
+        console.log('Starting n8n health check...');
         await waitForN8n();
+        console.log('n8n health check completed successfully, proceeding with webhook call...');
 
         const postData = JSON.stringify(event);
         const options = {
@@ -100,8 +102,14 @@ exports.handler = async (event) => {
             },
         };
 
+        console.log('Making webhook call to n8n...');
+        console.log('Request options:', JSON.stringify(options, null, 2));
+        console.log('Post data being sent:', postData);
+        
         return new Promise((resolve, reject) => {
         const req = http.request(options, (res) => {
+            console.log('Received response from n8n webhook, status:', res.statusCode);
+            console.log('Response headers:', JSON.stringify(res.headers, null, 2));
             let responseBody = '';
             res.on('data', (chunk) => {
                 responseBody += chunk;
@@ -110,9 +118,24 @@ exports.handler = async (event) => {
             res.on('end', () => {
                 if (res.statusCode === 200) {
                     console.log('Successfully triggered n8n workflow.');
+                    console.log('Webhook response body:', responseBody);
+                    console.log('Response body length:', responseBody.length);
+                    
+                    let parsedData;
+                    try {
+                        parsedData = responseBody ? JSON.parse(responseBody) : {};
+                    } catch (parseError) {
+                        console.error('Failed to parse n8n response as JSON:', parseError.message);
+                        parsedData = { raw_response: responseBody, parse_error: parseError.message };
+                    }
+                    
                     resolve({
                         statusCode: 200,
-                        body: JSON.stringify({ message: 'Workflow triggered successfully', data: JSON.parse(responseBody) }),
+                        body: JSON.stringify({ 
+                            message: 'Workflow triggered successfully', 
+                            data: parsedData,
+                            timestamp: new Date().toISOString()
+                        })
                     });
                 } else {
                     console.error('Failed to trigger n8n workflow. Status:', res.statusCode, 'Response:', responseBody);
@@ -143,6 +166,8 @@ exports.handler = async (event) => {
             req.write(postData);
             req.end();
         });
+        
+        console.log('Handler execution completed, waiting for webhook response...');
     } catch (error) {
         console.error('Lambda handler error:', error);
         return {

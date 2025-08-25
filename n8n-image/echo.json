@@ -16,7 +16,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Simple hello world response\nconst input = $input.first().json;\nconst message = input.body?.message || input.message || 'Hello World!';\n\nreturn [{\n  json: {\n    response: `Hello! You said: ${message}`,\n    timestamp: new Date().toISOString(),\n    webhook_path: '/echo'\n  }\n}];"
+        "jsCode": "// Echo back the input from Lambda event\nconst input = $input.first().json;\nconst lambdaEvent = input.body ? JSON.parse(input.body) : input;\n\n// Extract message from different possible locations\nconst message = lambdaEvent.body?.input || lambdaEvent.input || lambdaEvent.message || JSON.stringify(lambdaEvent);\n\nreturn [{\n  json: {\n    response: `Hello! You said: ${message}`,\n    timestamp: new Date().toISOString(),\n    webhook_path: '/echo',\n    original_input: lambdaEvent\n  }\n}];"
       },
       "id": "code-node",
       "name": "Hello World Code",

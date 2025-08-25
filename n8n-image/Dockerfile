@@ -22,6 +22,8 @@ ENV N8N_LISTEN_ADDRESS=0.0.0.0
 # Copy the workflow files and script
 COPY echo.json /opt/echo.json
 COPY health.json /opt/health.json
+COPY echo-processor.js /opt/echo-processor.js
+COPY build-workflow.js /opt/build-workflow.js
 COPY init.sh /opt/init.sh
 RUN chmod +x /opt/init.sh
 

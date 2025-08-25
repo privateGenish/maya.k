@@ -115,7 +115,7 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
                             
                             # Invoke N8N Lambda container to process the message
                             n8n_response = invoke_n8n_lambda(text_body)
-                            response_message = n8n_response.get('output', f"You said: {text_body}")
+                            response_message = n8n_response.get('data', {}).get('response', f"You said: {text_body}")
                             
                             if sender_phone:
                                 response_result = wa_response.send_reply_message(

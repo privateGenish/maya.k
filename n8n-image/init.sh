@@ -1,6 +1,9 @@
 #!/bin/sh
+echo "Building workflows with external JavaScript..."
+node /opt/build-workflow.js
+
 echo "Importing workflows..."
-npm exec n8n import:workflow -- --input=/opt/echo.json
+npm exec n8n import:workflow -- --input=/opt/echo-updated.json
 npm exec n8n import:workflow -- --input=/opt/health.json
 npm exec n8n update:workflow -- --all --active=true
 echo "Workflows imported and activated"
